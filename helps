@@ -1,0 +1,132 @@
+local Toggle = Tabs.Main:AddToggle("CamlockToggle", { Title = "Enable Camlock", Default = false })
+local CamlockEnabled = Toggle.Value
+
+Toggle:OnChanged(function()
+    CamlockEnabled = Toggle.Value
+end)
+
+-- Function to calculate High Arc adjustment
+local function HighArc(dist)
+    if dist >= 59 and dist <= 61 then
+        return 17
+    elseif dist >= 62 and dist <= 63 then
+        return 16
+    elseif dist >= 64 and dist <= 65 then
+        return 13
+    elseif dist >= 66 and dist <= 67 then
+        return 11
+    elseif dist >= 68 and dist <= 69 then
+        return 8
+    elseif dist >= 70 and dist <= 71 then
+        return 5
+    elseif dist == 72 then
+        return 2
+    else
+        return 0
+    end
+end
+
+-- Function to calculate the optimal hoop target position
+local function GetOptimalTargetPosition(HoopPosition, CharacterPosition, Distance)
+    local ArcAdjustment = HighArc(math.floor(Distance))  -- Use High Arc
+    local TargetPosition = HoopPosition + Vector3.new(0, ArcAdjustment, 0)
+    
+    -- Small offset to help with aiming accuracy
+    local AccurateTargetPosition = TargetPosition + (CharacterPosition - HoopPosition).unit * 1.5  -- Adjust for precision
+    return AccurateTargetPosition
+end
+
+-- Camlock Function (With High Arc for Shooting)
+local function Camlock()
+    local Players = game:GetService("Players")
+    local Workspace = game:GetService("Workspace")
+    local Player = Players.LocalPlayer
+    local Character = Player.Character or Player.CharacterAdded:Wait()
+    local Camera = Workspace.CurrentCamera
+    local Humanoid = Character:WaitForChild("Humanoid")
+
+    -- Find the nearest hoop
+    local function GetNearestHoop()
+        local Distance, TargetHoop = math.huge, nil
+        local CharacterPosition = Character.PrimaryPart.Position
+
+        local function CheckHoops(container)
+            if not container then return end
+            for _, court in ipairs(container:GetChildren()) do
+                for _, Obj in ipairs(court:GetDescendants()) do
+                    if Obj.Name == "Swish" and Obj.Parent:FindFirstChildOfClass("TouchTransmitter") then
+                        local HoopPosition = Obj.Parent.Position
+                        local Magnitude = (CharacterPosition - HoopPosition).Magnitude
+                        if Magnitude < Distance then
+                            Distance = Magnitude
+                            TargetHoop = Obj.Parent
+                        end
+                    end
+                end
+            end
+        end
+
+        CheckHoops(Workspace:FindFirstChild("Courts"))
+        CheckHoops(Workspace:FindFirstChild("PracticeArea"))
+
+        return TargetHoop, Distance
+    end
+
+    -- Function to adjust aim (With High Arc and Accuracy)
+    local function AimAtHoop()
+        local Hoop, Distance = GetNearestHoop()
+        if Hoop then
+            local HoopPosition = Hoop.Position
+            local PlayerPosition = Character.PrimaryPart.Position
+            local OptimalTargetPosition = GetOptimalTargetPosition(HoopPosition, PlayerPosition, Distance)
+
+            -- Smoothly adjust camera towards the hoop with optimal accuracy
+            local NewCameraCFrame = CFrame.new(Camera.CFrame.Position, OptimalTargetPosition)
+            Camera.CFrame = NewCameraCFrame
+        end
+    end
+
+    -- Function to shoot the ball
+    local function ShootBall()
+        -- Assuming the ball is a part in the workspace that is a descendant of the character
+        local Ball = Character:FindFirstChild("Basketball") -- Replace with your actual ball name or logic for the ball
+
+        if Ball then
+            local Hoop, Distance = GetNearestHoop()
+            if Hoop then
+                local HoopPosition = Hoop.Position
+                local CharacterPosition = Character.PrimaryPart.Position
+                local TargetPosition = GetOptimalTargetPosition(HoopPosition, CharacterPosition, Distance)
+
+                -- Apply force to shoot the ball towards the hoop
+                local Direction = (TargetPosition - Ball.Position).unit
+                local ShootForce = 1000  -- Adjust as needed
+                local BodyVelocity = Instance.new("BodyVelocity")
+                BodyVelocity.MaxForce = Vector3.new(5000, 5000, 5000)  -- Max force to apply
+                BodyVelocity.Velocity = Direction * ShootForce
+                BodyVelocity.Parent = Ball
+
+                -- Optionally, add a slight delay and then remove the BodyVelocity
+                game.Debris:AddItem(BodyVelocity, 0.1)
+            end
+        end
+    end
+
+    -- Detect Jumping, Freefalling, and Landing
+    Humanoid.StateChanged:Connect(function(_, NewState)
+        if CamlockEnabled then
+            if NewState == Enum.HumanoidStateType.Jumping or NewState == Enum.HumanoidStateType.Freefall then
+                Camera.CameraType = Enum.CameraType.Follow
+                AimAtHoop()  -- Adjust the camera towards the hoop
+
+                -- Auto shoot the ball when jumping
+                ShootBall()
+            elseif NewState == Enum.HumanoidStateType.Landed then
+                Camera.CameraType = Enum.CameraType.Custom
+            end
+        end
+    end)
+end
+
+-- Activate Camlock
+Camlock()
