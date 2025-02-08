@@ -1,3 +1,22 @@
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+
+local Window = Fluent:CreateWindow({
+    Title = "helping " .. Fluent.Version,
+    SubTitle = "by Dot",
+    TabWidth = 115,
+    Size = UDim2.fromOffset(500, 300),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+local Tabs = {
+    Main = Window:AddTab({ Title = "Main", Icon = "" }),
+    Misc = Window:AddTab({ Title = "Misc", Icon = "" })
+}
+
+local Options = Fluent.Options
+
 local Toggle = Tabs.Main:AddToggle("CamlockToggle", { Title = "Enable Camlock", Default = false })
 local CamlockEnabled = Toggle.Value
 
@@ -41,6 +60,8 @@ local function Camlock()
     local Players = game:GetService("Players")
     local Workspace = game:GetService("Workspace")
     local Player = Players.LocalPlayer
+    if not Player then return end  -- Safety check to ensure LocalPlayer is valid
+    
     local Character = Player.Character or Player.CharacterAdded:Wait()
     local Camera = Workspace.CurrentCamera
     local Humanoid = Character:WaitForChild("Humanoid")
@@ -82,7 +103,7 @@ local function Camlock()
 
             -- Smoothly adjust camera towards the hoop with optimal accuracy
             local NewCameraCFrame = CFrame.new(Camera.CFrame.Position, OptimalTargetPosition)
-            Camera.CFrame = NewCameraCFrame
+            Camera.CFrame = Camera.CFrame:Lerp(NewCameraCFrame, 0.2)  -- Lerp for smoother transition
         end
     end
 
@@ -116,13 +137,18 @@ local function Camlock()
     Humanoid.StateChanged:Connect(function(_, NewState)
         if CamlockEnabled then
             if NewState == Enum.HumanoidStateType.Jumping or NewState == Enum.HumanoidStateType.Freefall then
-                Camera.CameraType = Enum.CameraType.Follow
+                -- Check if Camera is already Follow type
+                if Camera.CameraType ~= Enum.CameraType.Follow then
+                    Camera.CameraType = Enum.CameraType.Follow
+                end
                 AimAtHoop()  -- Adjust the camera towards the hoop
 
                 -- Auto shoot the ball when jumping
                 ShootBall()
             elseif NewState == Enum.HumanoidStateType.Landed then
-                Camera.CameraType = Enum.CameraType.Custom
+                if Camera.CameraType ~= Enum.CameraType.Custom then
+                    Camera.CameraType = Enum.CameraType.Custom
+                end
             end
         end
     end)
@@ -130,3 +156,4 @@ end
 
 -- Activate Camlock
 Camlock()
+
